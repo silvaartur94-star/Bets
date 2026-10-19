@@ -25,7 +25,7 @@ With no keys, the app uses **simulated data** so you can try everything. Before 
 
 ### Keys
 
-- `API_FOOTBALL_KEY`: create a free account at [api-football.com](https://dashboard.api-football.com). The free plan allows **100 requests a day**. Each update costs 1 request for the fixture list, 2 per match (odds and prediction), and 1 for every 20 matches being settled. At the default of 30 matches that comes to about 62 requests. Pressing **Atualizar** (Update) again reuses the fixtures already downloaded. Only **Descarregar odds** (Download odds) spends requests again.
+- `API_FOOTBALL_KEY`: create a free account at [api-football.com](https://dashboard.api-football.com). The free plan allows **100 requests a day**. Each update costs 1 request for the fixture list, 2 per match (odds and prediction), and 1 for every 20 matches being settled. At the default of 30 matches that comes to about 62 requests. The free plan also allows only 10 requests a minute, so the app spaces requests about 6 seconds apart: 30 matches take about 6–7 minutes. On a paid plan, set `API_FOOTBALL_PER_MINUTE` to its limit to go faster. Pressing **Atualizar** (Update) again reuses the fixtures already downloaded. Only **Descarregar odds** (Download odds) spends requests again.
 - `ANTHROPIC_API_KEY`: from [console.anthropic.com](https://console.anthropic.com). Each daily analysis is one call to `claude-opus-5-5`, with refusal fallback (`fallbacks: "default"`) turned on.
 - `DASHBOARD_PASSWORD`: protects the site with HTTP Basic Auth (any username works).
 - `CRON_SECRET`: protects `/api/cron/daily`.

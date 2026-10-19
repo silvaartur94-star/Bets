@@ -1,5 +1,6 @@
 // Client for API-Football v3 (https://www.api-football.com/documentation-v3).
-// The free plan allows 100 requests/day, so every call here is counted.
+// The free plan allows 100 requests/day and 10 per minute, so every call here
+// is counted and spaced out.
 import { leaguePriority } from "./leagues";
 import type { Selection } from "./model";
 import type { ApiTip, FixtureInput, FixtureResult } from "./sources";
@@ -7,22 +8,36 @@ import { TZ } from "./dates";
 
 const BASE = "https://v3.football.api-sports.io";
 const BOOKMAKER = 8; // Bet365
+// Requests per minute allowed by your plan (free = 10). Paid plans can raise it.
+const PER_MINUTE = Number(process.env.API_FOOTBALL_PER_MINUTE) || 10;
+const GAP_MS = Math.ceil(60_000 / PER_MINUTE) + 200;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class ApiFootball {
   requests = 0;
+  private lastRequest = 0;
   constructor(private key: string) {}
 
-  private async get<T>(path: string, params: Record<string, string | number>): Promise<T[]> {
+  private async get<T>(path: string, params: Record<string, string | number>, retried = false): Promise<T[]> {
     const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
+    const wait = this.lastRequest + GAP_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    this.lastRequest = Date.now();
     this.requests++;
     const res = await fetch(`${BASE}${path}?${qs}`, {
       headers: { "x-apisports-key": this.key },
       cache: "no-store",
     });
-    if (!res.ok) throw new Error(`API-Football ${path} HTTP ${res.status}`);
-    const json = (await res.json()) as { response: T[]; errors: unknown };
-    const errors = json.errors && typeof json.errors === "object" ? Object.values(json.errors) : [];
-    if (errors.length) throw new Error(`API-Football ${path}: ${errors.join("; ")}`);
+    const json = res.ok ? ((await res.json()) as { response: T[]; errors: unknown }) : null;
+    const errors = json?.errors && typeof json.errors === "object" ? (json.errors as Record<string, string>) : {};
+    // The per-minute limit shows up as HTTP 429 or as a "rateLimit" error: wait a minute and retry once.
+    if ((res.status === 429 || "rateLimit" in errors) && !retried) {
+      await sleep(61_000);
+      return this.get<T>(path, params, true);
+    }
+    if (!res.ok || !json) throw new Error(`API-Football ${path} HTTP ${res.status}`);
+    if (Object.keys(errors).length) throw new Error(`API-Football ${path}: ${Object.values(errors).join("; ")}`);
     return json.response;
   }
 
