@@ -39,7 +39,13 @@ Each run (1) settles finished bets, (2) downloads the day's matches, odds and pr
 
 ### Deploying to Vercel
 
-SQLite doesn't persist on Vercel. Create a Postgres database (Neon or Supabase), change `provider = "postgresql"` in `prisma/schema.prisma`, set `DATABASE_URL`, and run `npx prisma db push`.
+SQLite doesn't persist on Vercel, so the online version uses Postgres. Nothing in the code needs changing: on Vercel the `vercel-build` script switches to `prisma/schema.postgres.prisma` and creates the tables itself.
+
+1. Create a free Postgres database on [Neon](https://neon.tech). Copy the **direct** connection string (connection pooling off).
+2. On Vercel, import this repository and add the environment variables `DATABASE_URL` (the Neon string), `API_FOOTBALL_KEY`, `ANTHROPIC_API_KEY`, `CRON_SECRET` and `DASHBOARD_PASSWORD`.
+3. Deploy.
+
+Online updates are limited to 5 minutes, so keep "Máx. jogos por dia" (max matches per day) at 20 or less on the free API-Football plan.
 
 ## Structure
 

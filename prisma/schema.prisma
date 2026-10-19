@@ -100,7 +100,7 @@ model Settings {
   minOdds       Float   @default(1.4)
   maxOdds       Float   @default(4.5)
   leagues       String  @default("39,140,135,78,61,94,71,2,3,848")
-  maxFixtures   Int     @default(30)
+  maxFixtures   Int     @default(20)
 }
 
 model RunLog {

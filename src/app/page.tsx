@@ -8,6 +8,8 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { Confidence, Empty, KindTag, Stat, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
+// The "Atualizar" button runs the daily job from this page, which can take a few minutes.
+export const maxDuration = 300;
 
 export default async function Today() {
   const day = dayKey();

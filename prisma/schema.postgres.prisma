@@ -1,0 +1,114 @@
+// Same schema as schema.prisma, for Postgres (used by "vercel-build"). Keep the two in sync.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Fixture {
+  id          Int      @id // API-Football fixture id (mock ids are negative)
+  date        DateTime
+  leagueId    Int
+  leagueName  String
+  country     String
+  homeTeam    String
+  awayTeam    String
+  homeLogo    String?
+  awayLogo    String?
+  status      String   @default("NS") // NS, LIVE, FT, PST, CANC...
+  homeGoals   Int?
+  awayGoals   Int?
+  // Best available decimal odds
+  oddsHome    Float?
+  oddsDraw    Float?
+  oddsAway    Float?
+  oddsOver25  Float?
+  oddsUnder25 Float?
+  oddsBttsYes Float?
+  oddsBttsNo  Float?
+  // Expected goals used by the model
+  xgHome      Float?
+  xgAway      Float?
+  formHome    String?
+  formAway    String?
+  updatedAt   DateTime @updatedAt
+  picks       Pick[]
+
+  @@index([date])
+}
+
+model Tipster {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  kind      String // AI | MODEL | API | HUMAN
+  url       String?
+  notes     String?
+  createdAt DateTime @default(now())
+  picks     Pick[]
+}
+
+model Pick {
+  id           Int          @id @default(autoincrement())
+  fixtureId    Int
+  fixture      Fixture      @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
+  tipsterId    Int
+  tipster      Tipster      @relation(fields: [tipsterId], references: [id], onDelete: Cascade)
+  market       String // 1X2 | OU25 | BTTS
+  selection    String // HOME | DRAW | AWAY | OVER | UNDER | YES | NO
+  odds         Float
+  probability  Float? // estimated true probability 0..1
+  edge         Float? // probability * odds - 1
+  stake        Float // euros
+  confidence   Int? // 1..5
+  reasoning    String?
+  status       String       @default("PENDING") // PENDING | WON | LOST | VOID
+  profit       Float?
+  createdAt    DateTime     @default(now())
+  accaLegs     AccaLeg[]
+
+  @@unique([fixtureId, tipsterId, market, selection])
+  @@index([status])
+}
+
+model Accumulator {
+  id        Int       @id @default(autoincrement())
+  day       String // YYYY-MM-DD
+  odds      Float
+  stake     Float
+  status    String    @default("PENDING")
+  profit    Float?
+  createdAt DateTime  @default(now())
+  legs      AccaLeg[]
+}
+
+model AccaLeg {
+  id     Int         @id @default(autoincrement())
+  accaId Int
+  acca   Accumulator @relation(fields: [accaId], references: [id], onDelete: Cascade)
+  pickId Int
+  pick   Pick        @relation(fields: [pickId], references: [id], onDelete: Cascade)
+}
+
+model Settings {
+  id            Int     @id @default(1)
+  bankroll      Float   @default(1000)
+  kellyFraction Float   @default(0.25)
+  maxStakePct   Float   @default(0.03)
+  minEdge       Float   @default(0.03)
+  minOdds       Float   @default(1.4)
+  maxOdds       Float   @default(4.5)
+  leagues       String  @default("39,140,135,78,61,94,71,2,3,848")
+  maxFixtures   Int     @default(20)
+}
+
+model RunLog {
+  id        Int      @id @default(autoincrement())
+  day       String
+  source    String // api | mock
+  message   String
+  createdAt DateTime @default(now())
+}
