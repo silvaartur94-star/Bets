@@ -1,5 +1,6 @@
 // Daily job: settle finished bets, ingest today's fixtures, and generate picks
 // from the value model, the data provider, and the AI analyst.
+import type { Prisma } from "@prisma/client";
 import { prisma, getSettings } from "./db";
 import { ApiFootball } from "./apiFootball";
 import { mockFixtures, mockResults } from "./mock";
@@ -26,7 +27,21 @@ export interface RunReport {
  * `backfill` replays a past day with mock data (for demo history): it skips the
  * kickoff-time filter, never calls Claude, and settles straight away.
  */
+// Only one run at a time: a second click on "Atualizar" (or the cron firing
+// mid-run) waits for the run in progress and gets its report.
+let running: Promise<RunReport> | null = null;
+
 export async function runDaily(opts: { day?: string; refetch?: boolean; backfill?: boolean } = {}): Promise<RunReport> {
+  if (running) return running;
+  running = run(opts);
+  try {
+    return await running;
+  } finally {
+    running = null;
+  }
+}
+
+async function run(opts: { day?: string; refetch?: boolean; backfill?: boolean }): Promise<RunReport> {
   const day = opts.day ?? dayKey();
   const key = process.env.API_FOOTBALL_KEY?.trim();
   const api = key && !opts.backfill ? new ApiFootball(key) : null;
@@ -171,18 +186,16 @@ async function generatePicks(
     if (best) {
       const stake = kellyStake(best.probability, best.odds, settings.bankroll, settings.kellyFraction, settings.maxStakePct);
       if (stake > 0) {
-        await prisma.pick.create({
-          data: {
-            fixtureId: f.id,
-            tipsterId: model.id,
-            market: best.market,
-            selection: best.selection,
-            odds: best.odds,
-            probability: best.probability,
-            edge: best.edge,
-            stake,
-            confidence: Math.min(5, 1 + Math.floor(best.edge * 25)),
-          },
+        await savePick({
+          fixtureId: f.id,
+          tipsterId: model.id,
+          market: best.market,
+          selection: best.selection,
+          odds: best.odds,
+          probability: best.probability,
+          edge: best.edge,
+          stake,
+          confidence: Math.min(5, 1 + Math.floor(best.edge * 25)),
         });
         created++;
       }
@@ -233,19 +246,17 @@ async function generatePicks(
     const prob = Math.min(p.probability, Math.max(o.probability, p.probability - 0.05));
     const stake = kellyStake(prob, o.odds, settings.bankroll, settings.kellyFraction, settings.maxStakePct) || unit(settings.bankroll) / 2;
     aiPicks.push(
-      await prisma.pick.create({
-        data: {
-          fixtureId: p.fixtureId,
-          tipsterId: aiTipster.id,
-          market: o.market,
-          selection: o.selection,
-          odds: o.odds,
-          probability: round(p.probability, 3),
-          edge: round(p.probability * o.odds - 1, 3),
-          stake,
-          confidence: p.confidence,
-          reasoning: p.reasoning,
-        },
+      await savePick({
+        fixtureId: p.fixtureId,
+        tipsterId: aiTipster.id,
+        market: o.market,
+        selection: o.selection,
+        odds: o.odds,
+        probability: round(p.probability, 3),
+        edge: round(p.probability * o.odds - 1, 3),
+        stake,
+        confidence: p.confidence,
+        reasoning: p.reasoning,
       }),
     );
     created++;
@@ -271,6 +282,16 @@ async function generatePicks(
   }
 
   return { picks: created, engine: ai.engine };
+}
+
+/** Creates a pick, or refreshes it if this tipster already has the same pick on the fixture. */
+function savePick(data: Prisma.PickUncheckedCreateInput) {
+  const { fixtureId, tipsterId, market, selection } = data;
+  return prisma.pick.upsert({
+    where: { fixtureId_tipsterId_market_selection: { fixtureId, tipsterId, market, selection } },
+    update: data,
+    create: data,
+  });
 }
 
 /** Settles every pending pick whose fixture kicked off more than two hours ago. */
